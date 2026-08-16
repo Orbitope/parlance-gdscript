@@ -1,0 +1,18 @@
+; Godot project — Parlance GDScript runtime
+;
+; This project exists so the conformance suite can run and so the repo opens
+; in the editor. There is no main scene: the deliverable is `addons/parlance/`,
+; which is a library of static classes, not a game.
+config_version=5
+
+[application]
+config/name="Parlance (GDScript)"
+config/description="GDScript runtime for the Parlance narrative format."
+config/features=PackedStringArray("4.4", "GL Compatibility")
+run/main_scene=""
+
+[rendering]
+renderer/rendering_method="gl_compatibility"
+
+[editor_plugins]
+enabled=PackedStringArray()

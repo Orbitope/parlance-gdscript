@@ -1,0 +1,40 @@
+name: conformance
+
+# The whole point of this repo is that the vectors pass. Running them only on a
+# maintainer's laptop makes that a claim again, so run them on every push.
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  vectors:
+    runs-on: ubuntu-latest
+    env:
+      GODOT_VERSION: "4.4"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Godot (headless)
+        run: |
+          set -euo pipefail
+          BASE="Godot_v${GODOT_VERSION}-stable_linux.x86_64"
+          URL="https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/${BASE}.zip"
+          curl -fsSL -o godot.zip "$URL"
+          unzip -q godot.zip
+          chmod +x "$BASE"
+          sudo mv "$BASE" /usr/local/bin/godot
+          godot --version
+
+      - name: Import project
+        # First run generates .godot/ and the import cache. It exits non-zero on
+        # some versions even when import succeeded, so its status is ignored —
+        # the conformance step below is the real gate.
+        run: godot --headless --import || true
+
+      - name: Run conformance vectors
+        # Exit code is 0 only if every implemented family passes. Skipped
+        # families are reported and never mask a failure.
+        run: godot --headless --script tests/conformance_runner.gd
