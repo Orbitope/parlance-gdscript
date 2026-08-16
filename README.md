@@ -23,6 +23,29 @@ rather than against its author's confidence.
 136 passed, 0 failed, 19 skipped (not yet ported)
 ```
 
+## Compatibility
+
+| parlance-gdscript | Parlance spec | Families |
+|---|---|---|
+| `main` (unreleased) | v0.9.0 — pre-tag, pinned to [`1a4e657`](conformance/PIN) | 7 of 10 |
+
+**Versions here are independent of Parlance's**, deliberately, and this table is
+how the two are tied together. Two reasons not to mirror the upstream number:
+
+- Parlance uses the patch slot itself (`v0.4.3` exists), so a mirrored version
+  leaves this port no room to release its own fixes without colliding with a
+  spec release.
+- `v0.9.0` on this repo would read as "implements Parlance 0.9.0", and it does
+  not — `resolveQuests` and `progression` are missing. A version number is the
+  most visible claim a project makes and it should not be the least accurate.
+
+So this stays in `0.x` while families are missing. `v1.0.0` will mean something
+checkable: complete against the spec, not merely current with it.
+
+[`conformance/PIN`](conformance/PIN) is the authoritative record of which
+upstream ref the vectors came from — this table is the human-readable summary of
+it, and if they ever disagree, PIN is right.
+
 ## Install
 
 Copy `addons/parlance/` into your project's `addons/` directory. That's it —
