@@ -1,12 +1,18 @@
 # Parlance for Godot
 
-A GDScript runtime for the [Parlance](https://github.com/Orbitope/parlance)
-narrative format.
+A GDScript runtime for [Parlance](https://github.com/Orbitope/parlance), a
+git-native narrative design tool for story-driven games.
 
-Parlance stores a game's story as plain JSON — dialogues, conditions, effects,
-skill checks, character dialogue ladders, quests, endings. This addon executes
-that JSON in Godot 4, and is verified against the published conformance vectors
-rather than against its author's confidence.
+**Parlance is the authoring tool; this is one engine's runtime for what it
+produces.** You write your story in Parlance's visual editor — dialogue and
+quest canvases, a searchable reference index, live playtest — and it saves as
+human-readable JSON directly in your repo. No database, no import/export step,
+git as the single source of truth.
+
+This addon reads that JSON and runs it in Godot 4: dialogues, conditions,
+effects, skill checks, character dialogue ladders, quests, endings. It is
+verified against Parlance's published conformance vectors rather than against
+its author's confidence.
 
 ```
   PASS  mulberry32                     6 vectors
