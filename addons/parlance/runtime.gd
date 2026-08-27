@@ -320,6 +320,24 @@ static func step_dialogue(dialogue: Dictionary, node_id: String, state: State, p
 	if node == null:
 		return {"error": "node '%s' does not exist in dialogue '%s'" % [node_id, dialogue.get("id", "?")]}
 
+	# Node-level showIf skip walk (contract 0.11.0): stepping onto a gated node
+	# whose gate fails resolves to the node the player actually sees — the same
+	# skip advance_node performs. A ring of failing gates is COND-invalid and is
+	# reported rather than looped.
+	var seen := {}
+	while node.has("showIf") and not evaluate(node["showIf"], state, project):
+		var here := str(node.get("id", node_id))
+		if seen.has(here):
+			return {"error": "Cycle among conditional nodes: resolution cannot escape"}
+		seen[here] = true
+		if not node.has("next"):
+			return {"error": "conditional node '%s' has no 'next' to skip to" % here}
+		var next_id := str(node["next"])
+		var next_node: Variant = find_node(dialogue, next_id)
+		if next_node == null:
+			return {"error": "next target '%s' does not exist in dialogue '%s'" % [next_id, dialogue.get("id", "?")]}
+		node = next_node
+
 	var visible: Array = []
 	for choice in node.get("choices", []):
 		if not choice is Dictionary:
@@ -422,8 +440,26 @@ static func advance_node(dialogue: Dictionary, node_id: String, state: State) ->
 		return {"error": "node '%s' has no 'next' to advance from" % node_id}
 
 	var target_id := str(node["next"])
-	if find_node(dialogue, target_id) == null:
-		return {"error": "next target '%s' does not exist in dialogue '%s'" % [target_id, dialogue.get("id", "?")]}
+
+	# Node-level showIf skip walk (contract 0.11.0): cross gated nodes whose gate
+	# fails, following each one's `next`, until a shown node is reached. A ring of
+	# failing gates is COND-invalid data and is reported, not looped. onEnter does
+	# not fire here — advance is navigation, exactly as the ungated path is.
+	var visited := {}
+	while true:
+		var target_node: Variant = find_node(dialogue, target_id)
+		if target_node == null:
+			return {"error": "next target '%s' does not exist in dialogue '%s'" % [target_id, dialogue.get("id", "?")]}
+		if not target_node.has("showIf"):
+			break
+		if evaluate(target_node["showIf"], state, {}):
+			break
+		if visited.has(target_id):
+			return {"error": "Cycle among conditional nodes: resolution cannot escape"}
+		visited[target_id] = true
+		if not target_node.has("next"):
+			return {"error": "conditional node '%s' has no 'next' to skip to" % target_id}
+		target_id = str(target_node["next"])
 
 	return {"nextNodeId": target_id, "newState": state}
 
