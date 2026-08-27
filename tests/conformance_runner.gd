@@ -180,8 +180,10 @@ func _check_step_dialogue(v: Dictionary) -> Variant:
 		ids.append(choice.get("id", null))
 
 	return _diff({
+		"nodeId": out["node"].get("id", null),
 		"visibleChoiceIds": ids,
 		"onEnterEffectCount": out["onEnterEffects"].size(),
+		"onEnterEffects": out["onEnterEffects"],
 	}, v["expected"])
 
 
