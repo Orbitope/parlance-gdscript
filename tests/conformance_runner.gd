@@ -39,9 +39,9 @@ func _init() -> void:
 	_run_family("choose_choice.json", "chooseChoice", _check_choose_choice)
 	_run_family("advance.json", "advanceNode", _check_advance)
 	_run_family("resolveCharacterDialogue.json", "resolveCharacterDialogue", _check_character_dialogue)
-	_skip_family("resolve_quests.json", "resolveQuests")
-	_skip_family("progression.json", "progression")
-	_skip_family("nextContinuations.json", "nextContinuations")
+	_run_family("nextContinuations.json", "nextContinuations", _check_next_continuations)
+	_run_family("resolve_quests.json", "resolveQuests", _check_resolve_quests)
+	_run_family("progression.json", "progression", _check_progression)
 
 	_report()
 
@@ -242,6 +242,49 @@ func _check_character_dialogue(v: Dictionary) -> Variant:
 	var got: Variant = Runtime.resolve_character_dialogue(
 		State.from_dict(v["state"]), v["character"], v.get("project", {}), v.get("visited", null)
 	)
+	return _diff(got, v["expected"])
+
+
+## Continuations are compared by id, as the reference harness does: the
+## dialogue/cutscene objects themselves are the project's own data.
+func _check_next_continuations(v: Dictionary) -> Variant:
+	var out := Runtime.next_continuations(
+		State.from_dict(v["state"]), v["project"], v.get("visited", []), v["currentDialogueId"]
+	)
+	var got: Array = []
+	for c in out:
+		if c["kind"] == "cutscene":
+			got.append({"kind": "cutscene", "cutscene": c["cutscene"].get("id")})
+		else:
+			got.append({"kind": "dialogue", "characterId": c["characterId"], "dialogue": c["dialogue"].get("id"), "queued": c["queued"]})
+	return _diff(got, v["expected"])
+
+
+func _check_resolve_quests(v: Dictionary) -> Variant:
+	var out := Runtime.resolve_quests(State.from_dict(v["state"]), v["project"])
+	var firings: Array = []
+	for f in out["firings"]:
+		firings.append({"quest": f["quest"], "kind": f["kind"], "id": f["id"]})
+	return _diff({"state": out["state"].to_dict(), "firings": firings}, v["expected"])
+
+
+## progression.json mixes five functions; the vector's `fn` picks one.
+func _check_progression(v: Dictionary) -> Variant:
+	var config: Dictionary = v["config"]
+	var got: Variant
+	match v["fn"]:
+		"levelForXp":
+			got = Runtime.level_for_xp(float(v["xp"]), config)
+		"pointsEarned":
+			got = Runtime.points_earned(float(v["xp"]), config)
+		"availablePoints":
+			got = Runtime.available_points(State.from_dict(v["state"]), config)
+		"investSkillPoint":
+			got = Runtime.invest_skill_point(State.from_dict(v["state"]), v["skillId"], config).to_dict()
+		"recomputeSkills":
+			got = Runtime.recompute_skills(State.from_dict(v["state"]), config).to_dict()
+		_:
+			return "unknown progression fn '%s'" % v["fn"]
 	return _diff(got, v["expected"])
 
 
