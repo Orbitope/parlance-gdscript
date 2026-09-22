@@ -10,30 +10,31 @@ human-readable JSON directly in your repo. No database, no import/export step,
 git as the single source of truth.
 
 This addon reads that JSON and runs it in Godot 4: dialogues, conditions,
-effects, skill checks, character dialogue ladders, quests, endings. It is
-verified against Parlance's published conformance vectors rather than against
-its author's confidence.
+effects, skill checks (with conditional modifiers), character dialogue offers,
+quests, endings. It is verified against Parlance's published conformance
+vectors rather than against its author's confidence.
 
 ```
   PASS  mulberry32                     6 vectors
   PASS  evaluate                      53 vectors
   PASS  applyEffect                   27 vectors
-  PASS  resolveCheck                  18 vectors
-  PASS  stepDialogue                   8 vectors
-  PASS  chooseChoice                   9 vectors
-  PASS  advanceNode                    9 vectors
-  PASS  resolveCharacterDialogue       6 vectors
+  PASS  resolveCheck                  24 vectors
+  PASS  stepDialogue                  11 vectors
+  PASS  chooseChoice                  10 vectors
+  PASS  advanceNode                   12 vectors
+  PASS  resolveCharacterDialogue      16 vectors
   SKIP  resolveQuests                  6 vectors — not ported yet
   SKIP  progression                   13 vectors — not ported yet
+  SKIP  nextContinuations              4 vectors — not ported yet
 
-136 passed, 0 failed, 19 skipped (not yet ported)
+159 passed, 0 failed, 23 skipped (not yet ported)
 ```
 
 ## Compatibility
 
 | parlance-gdscript | Parlance spec | Families |
 |---|---|---|
-| `main` (unreleased) | v0.9.0 — pre-tag, pinned to [`1a4e657`](conformance/PIN) | 7 of 10 |
+| `main` (unreleased) | v0.14.0 — pinned to [`f4a25b0`](conformance/PIN) | 8 of 11 |
 
 **Versions here are independent of Parlance's**, deliberately, and this table is
 how the two are tied together. Two reasons not to mirror the upstream number:
@@ -41,9 +42,10 @@ how the two are tied together. Two reasons not to mirror the upstream number:
 - Parlance uses the patch slot itself (`v0.4.3` exists), so a mirrored version
   leaves this port no room to release its own fixes without colliding with a
   spec release.
-- `v0.9.0` on this repo would read as "implements Parlance 0.9.0", and it does
-  not — `resolveQuests` and `progression` are missing. A version number is the
-  most visible claim a project makes and it should not be the least accurate.
+- `v0.14.0` on this repo would read as "implements Parlance 0.14.0", and it does
+  not — `resolveQuests`, `progression` and `nextContinuations` are missing. A
+  version number is the most visible claim a project makes and it should not be
+  the least accurate.
 
 So this stays in `0.x` while families are missing. `v1.0.0` will mean something
 checkable: complete against the spec, not merely current with it.
@@ -107,11 +109,15 @@ Three things that are easy to get wrong, and are contract rather than style:
 
 `evaluate`, `applyEffect`, `resolveCheck`, `stepDialogue`, `chooseChoice`,
 `advanceNode`, `resolveCharacterDialogue`, and the mulberry32 PRNG — enough to
-run dialogue end to end, including gated choices, active skill checks, effects,
-and character ladders.
+run dialogue end to end, including gated choices, active skill checks and their
+conditional modifiers, effects, and character dialogue offers. `check_bonus`,
+`passive_check_passes` and `condition_specificity` are exported too:
+`passive_check_passes` is the passive-check reveal threshold
+(`skill + Σbonus >= difficulty`) an engine should use to show or hide a passive
+choice, so a modifier means the same thing in both modes.
 
-**Not ported:** `resolveQuests` and `progression`. They report as SKIP rather
-than passing by omission. Note that quest *conditions* still work: `questOutcome`
+**Not ported:** `resolveQuests`, `progression` and `nextContinuations`. They
+report as SKIP rather than passing by omission. Note that quest *conditions* still work: `questOutcome`
 re-evaluates an outcome's own `reachedWhen` against current state rather than
 reading a fired-record, so endings gated on outcomes resolve without them.
 
@@ -132,8 +138,8 @@ the failure mode this runner exists to avoid.
 
 To confirm the suite can actually fail, break something on purpose: change a
 `>=` to `>` in `_compare` in `addons/parlance/runtime.gd` and re-run. You should
-get 5 failures across `evaluate` and `stepDialogue`. If it stays green, the
-suite is lying and that is worth an issue.
+get 6 failures across `evaluate`, `resolveCheck` and `stepDialogue`. If it stays
+green, the suite is lying and that is worth an issue.
 
 CI runs the same command on every push.
 
