@@ -41,6 +41,7 @@ func _init() -> void:
 	_run_family("resolveCharacterDialogue.json", "resolveCharacterDialogue", _check_character_dialogue)
 	_skip_family("resolve_quests.json", "resolveQuests")
 	_skip_family("progression.json", "progression")
+	_skip_family("nextContinuations.json", "nextContinuations")
 
 	_report()
 
@@ -160,13 +161,22 @@ func _check_apply_effect(v: Dictionary) -> Variant:
 
 
 func _check_resolve_check(v: Dictionary) -> Variant:
+	# A check with modifiers requires a project, as a real caller always has
+	# one. Use the vector's when it carries one (quest state), else {} — the
+	# reference harness does exactly this.
+	var project = v.get("project", null)
+	if project == null and v["check"].get("modifiers", []).size() > 0:
+		project = {}
 	var got := Runtime.resolve_check(
 		v["check"],
 		State.from_dict(v["state"]),
 		_rng_from(v.get("rng", 0)),
 		v.get("defaultDice", null),
 		bool(v.get("criticals", false)),
+		project,
 	)
+	if got.has("error"):
+		return "unexpected error: %s" % got["error"]
 	return _diff(got, v["expected"])
 
 
@@ -230,7 +240,7 @@ func _check_advance(v: Dictionary) -> Variant:
 ## and `expected` is a dialogue id or null.
 func _check_character_dialogue(v: Dictionary) -> Variant:
 	var got: Variant = Runtime.resolve_character_dialogue(
-		State.from_dict(v["state"]), v["character"], v.get("project", {})
+		State.from_dict(v["state"]), v["character"], v.get("project", {}), v.get("visited", null)
 	)
 	return _diff(got, v["expected"])
 
