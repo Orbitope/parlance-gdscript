@@ -23,32 +23,27 @@ vectors rather than against its author's confidence.
   PASS  chooseChoice                  10 vectors
   PASS  advanceNode                   12 vectors
   PASS  resolveCharacterDialogue      16 vectors
-  SKIP  resolveQuests                  6 vectors — not ported yet
-  SKIP  progression                   13 vectors — not ported yet
-  SKIP  nextContinuations              4 vectors — not ported yet
+  PASS  nextContinuations              4 vectors
+  PASS  resolveQuests                  6 vectors
+  PASS  progression                   13 vectors
 
-159 passed, 0 failed, 23 skipped (not yet ported)
+182 passed, 0 failed, 0 skipped (not yet ported)
 ```
 
 ## Compatibility
 
 | parlance-gdscript | Parlance spec | Families |
 |---|---|---|
-| `main` (unreleased) | v0.14.0 — pinned to [`f4a25b0`](conformance/PIN) | 8 of 11 |
+| `main` (unreleased) | v0.14.0 — pinned to [`f4a25b0`](conformance/PIN) | 11 of 11 |
 
 **Versions here are independent of Parlance's**, deliberately, and this table is
-how the two are tied together. Two reasons not to mirror the upstream number:
+how the two are tied together. Parlance uses the patch slot itself (`v0.4.3`
+exists), so a mirrored version would leave this port no room to release its own
+fixes without colliding with a spec release.
 
-- Parlance uses the patch slot itself (`v0.4.3` exists), so a mirrored version
-  leaves this port no room to release its own fixes without colliding with a
-  spec release.
-- `v0.14.0` on this repo would read as "implements Parlance 0.14.0", and it does
-  not — `resolveQuests`, `progression` and `nextContinuations` are missing. A
-  version number is the most visible claim a project makes and it should not be
-  the least accurate.
-
-So this stays in `0.x` while families are missing. `v1.0.0` will mean something
-checkable: complete against the spec, not merely current with it.
+`v1.0.0` means something checkable: complete against the spec, not merely
+current with it. As of the v0.14.0 pin every family passes, so `main` meets
+that bar; it is not tagged yet.
 
 [`conformance/PIN`](conformance/PIN) is the authoritative record of which
 upstream ref the vectors came from — this table is the human-readable summary of
@@ -107,19 +102,32 @@ Three things that are easy to get wrong, and are contract rather than style:
 
 ## What's ported
 
-`evaluate`, `applyEffect`, `resolveCheck`, `stepDialogue`, `chooseChoice`,
-`advanceNode`, `resolveCharacterDialogue`, and the mulberry32 PRNG — enough to
-run dialogue end to end, including gated choices, active skill checks and their
-conditional modifiers, effects, and character dialogue offers. `check_bonus`,
+Every conformance family: `evaluate`, `applyEffect`, `resolveCheck`,
+`stepDialogue`, `chooseChoice`, `advanceNode`, `resolveCharacterDialogue`,
+`nextContinuations`, `resolveQuests`, the progression functions, and the
+mulberry32 PRNG. That covers dialogue end to end (gated choices, active skill
+checks and their conditional modifiers, effects, character dialogue offers),
+what to offer when a scene ends, quest effects, and levelling. `check_bonus`,
 `passive_check_passes` and `condition_specificity` are exported too:
 `passive_check_passes` is the passive-check reveal threshold
 (`skill + Σbonus >= difficulty`) an engine should use to show or hide a passive
 choice, so a modifier means the same thing in both modes.
 
-**Not ported:** `resolveQuests`, `progression` and `nextContinuations`. They
-report as SKIP rather than passing by omission. Note that quest *conditions* still work: `questOutcome`
-re-evaluates an outcome's own `reachedWhen` against current state rather than
-reading a fired-record, so endings gated on outcomes resolve without them.
+The rest of the public surface, in the same file:
+
+- **`next_continuations(state, project, visited, current_dialogue_id)`** — what
+  to offer when a scene ends. A pending cutscene first; then any character
+  routed with `set_active_dialogue` whose winning offer reads its flag (queued,
+  visited set ignored); otherwise each character's best eligible offer.
+  `clear_active_dialogue` and `clear_pending_cutscene` consume them.
+- **`resolve_quests(state, project)`** — fires quest stage `onComplete` and
+  outcome `effects` whose condition holds, once each, to a fixpoint. Run it
+  after every state change. It never advances a stage for you.
+- **Progression** — `level_for_xp`, `points_earned`, `available_points`,
+  `recompute_skills`, `invest_skill_point`, `effective_skill`, `skill_cap`.
+  `xp` is total-earned; levels and points are derived. Investing is a guarded
+  player action, not an effect. Pass the skills registry to honour per-skill
+  `max`.
 
 **Implemented but not vector-covered:** `resolveSpeaker`, `effectiveSpeakerId`,
 and `resolvePortrait`. The suite has no family for them, so they come from the
