@@ -150,13 +150,13 @@ func _run_family(file_name: String, label: String, checker: Callable) -> void:
 
 
 func _check_evaluate(v: Dictionary) -> Variant:
-	var got := Runtime.evaluate(v["condition"], State.from_dict(v["state"]), v.get("project", {}))
+	var got := Runtime.evaluate(v["condition"], State.from_dict(v["state"]), _project(v))
 	var want: bool = v["expected"]
 	return "" if got == want else "got %s, want %s" % [got, want]
 
 
 func _check_apply_effect(v: Dictionary) -> Variant:
-	var out := Runtime.apply_effect(v["effect"], State.from_dict(v["state"]), v.get("project", {}))
+	var out := Runtime.apply_effect(v["effect"], State.from_dict(v["state"]), _project(v))
 	return _diff(out.to_dict(), v["expected"])
 
 
@@ -181,20 +181,49 @@ func _check_resolve_check(v: Dictionary) -> Variant:
 
 
 func _check_step_dialogue(v: Dictionary) -> Variant:
-	var out := Runtime.step_dialogue(v["dialogue"], v["nodeId"], State.from_dict(v["state"]), v.get("project", {}))
+	var out := Runtime.step_dialogue(v["dialogue"], v["nodeId"], State.from_dict(v["state"]), _project(v))
 	if out.has("error"):
 		return "unexpected error: %s" % out["error"]
 
-	var ids: Array = []
-	for choice in out["visibleChoices"]:
-		ids.append(choice.get("id", null))
+	var want: Dictionary = v["expected"]
+	# nodeId and lockedChoiceIds are REQUIRED on every vector: a vector missing
+	# either is a defect in the file and fails here rather than skipping the
+	# assertion (an optional field is one a port can pass by never implementing).
+	if not want.has("nodeId") or not want.has("lockedChoiceIds"):
+		return "vector is missing nodeId or lockedChoiceIds"
 
-	return _diff({
-		"nodeId": out["node"].get("id", null),
-		"visibleChoiceIds": ids,
+	var node: Dictionary = out["node"]
+	var actual := {
+		"nodeId": node.get("id", null),
+		"visibleChoiceIds": _ids(out["visibleChoices"]),
+		"lockedChoiceIds": _ids(out["lockedChoices"]),
 		"onEnterEffectCount": out["onEnterEffects"].size(),
 		"onEnterEffects": out["onEnterEffects"],
-	}, v["expected"])
+	}
+	# textHidden: absent from the vector means false, and false is still
+	# ASSERTED — so a port that skips a gated choice node fails every vector.
+	var expected := want.duplicate()
+	expected["textHidden"] = want.get("textHidden", false)
+	actual["textHidden"] = out["textHidden"]
+	# The rest are asserted only where the vector states them, as the reference
+	# harness does. `text: null` pins a text-less node's ABSENT text.
+	if want.has("text"):
+		actual["text"] = node.get("text", null)
+	if want.has("nodeTags"):
+		actual["nodeTags"] = node.get("tags", null)
+	if want.has("visibleChoiceTags"):
+		var tags: Array = []
+		for choice in out["visibleChoices"]:
+			tags.append(choice.get("tags", null))
+		actual["visibleChoiceTags"] = tags
+	return _diff(actual, expected)
+
+
+func _ids(choices: Array) -> Array:
+	var ids: Array = []
+	for choice in choices:
+		ids.append(choice.get("id", null))
+	return ids
 
 
 func _check_choose_choice(v: Dictionary) -> Variant:
@@ -203,9 +232,13 @@ func _check_choose_choice(v: Dictionary) -> Variant:
 		v["nodeId"],
 		v["choiceId"],
 		State.from_dict(v["state"]),
-		v.get("project", {}),
+		_project(v),
 		_rng_from(v.get("rng", 0)),
 	)
+	# 0.15: a hidden, locked or unoffered-fallback choice is not selectable.
+	var failure: Variant = _expected_error(v, out)
+	if failure != null:
+		return failure
 	if out.has("error"):
 		return "unexpected error: %s" % out["error"]
 
@@ -217,19 +250,25 @@ func _check_choose_choice(v: Dictionary) -> Variant:
 	return _diff(actual, v["expected"])
 
 
-## The one family with a failure contract. The reference throws; this port
-## returns an "error" key (GDScript has no exceptions), and `expectedError` is
-## a SUBSTRING the message must contain.
+## The failure contract. The reference throws; this port returns an "error"
+## key (GDScript has no exceptions), and `expectedError` is a SUBSTRING the
+## message must contain. Returns null when the vector has no expectedError,
+## else the check's verdict ("" for a pass).
+func _expected_error(v: Dictionary, out: Dictionary) -> Variant:
+	if not v.has("expectedError"):
+		return null
+	if not out.has("error"):
+		return "expected an error containing %s, but the call succeeded" % [v["expectedError"]]
+	if not str(out["error"]).contains(v["expectedError"]):
+		return "error %s does not contain %s" % [out["error"], v["expectedError"]]
+	return ""
+
+
 func _check_advance(v: Dictionary) -> Variant:
-	var out := Runtime.advance_node(v["dialogue"], v["nodeId"], State.from_dict(v["state"]))
-
-	if v.has("expectedError"):
-		if not out.has("error"):
-			return "expected an error containing %s, but the call succeeded" % [v["expectedError"]]
-		if not str(out["error"]).contains(v["expectedError"]):
-			return "error %s does not contain %s" % [out["error"], v["expectedError"]]
-		return ""
-
+	var out := Runtime.advance_node(v["dialogue"], v["nodeId"], State.from_dict(v["state"]), _project(v))
+	var failure: Variant = _expected_error(v, out)
+	if failure != null:
+		return failure
 	if out.has("error"):
 		return "unexpected error: %s" % out["error"]
 
@@ -240,7 +279,7 @@ func _check_advance(v: Dictionary) -> Variant:
 ## and `expected` is a dialogue id or null.
 func _check_character_dialogue(v: Dictionary) -> Variant:
 	var got: Variant = Runtime.resolve_character_dialogue(
-		State.from_dict(v["state"]), v["character"], v.get("project", {}), v.get("visited", null)
+		State.from_dict(v["state"]), v["character"], _project(v), v.get("visited", null)
 	)
 	return _diff(got, v["expected"])
 
@@ -286,6 +325,15 @@ func _check_progression(v: Dictionary) -> Variant:
 		_:
 			return "unknown progression fn '%s'" % v["fn"]
 	return _diff(got, v["expected"])
+
+
+## The vector's project, or {} when it has none. Some vectors state
+## `"project": null` explicitly (their walk reads no project data), which a
+## plain `v.get("project", {})` would hand through as null — the reference
+## harness maps both to an empty project.
+func _project(v: Dictionary) -> Dictionary:
+	var p = v.get("project", null)
+	return p if p is Dictionary else {}
 
 
 ## A vector's `rng` is a single float for a one-die roll, or an array with one

@@ -11,30 +11,31 @@ git as the single source of truth.
 
 This addon reads that JSON and runs it in Godot 4: dialogues, conditions,
 effects, skill checks (with conditional modifiers), character dialogue offers,
-quests, endings. It is verified against Parlance's published conformance
+fallback and locked choices, line-only node gates, line and choice tags, engine
+commands, quests, endings. It is verified against Parlance's published conformance
 vectors rather than against its author's confidence.
 
 ```
   PASS  mulberry32                     6 vectors
   PASS  evaluate                      53 vectors
-  PASS  applyEffect                   27 vectors
+  PASS  applyEffect                   29 vectors
   PASS  resolveCheck                  24 vectors
-  PASS  stepDialogue                  11 vectors
-  PASS  chooseChoice                  10 vectors
-  PASS  advanceNode                   12 vectors
+  PASS  stepDialogue                  24 vectors
+  PASS  chooseChoice                  17 vectors
+  PASS  advanceNode                   14 vectors
   PASS  resolveCharacterDialogue      16 vectors
   PASS  nextContinuations              4 vectors
-  PASS  resolveQuests                  6 vectors
+  PASS  resolveQuests                  7 vectors
   PASS  progression                   13 vectors
 
-182 passed, 0 failed, 0 skipped (not yet ported)
+207 passed, 0 failed, 0 skipped (not yet ported)
 ```
 
 ## Compatibility
 
 | parlance-gdscript | Parlance spec | Families |
 |---|---|---|
-| `main` (unreleased) | v0.14.0 — pinned to [`f4a25b0`](conformance/PIN) | 11 of 11 |
+| `main` (unreleased) | v0.15.0 — pinned to [`a3c6454`](conformance/PIN) | 11 of 11 |
 
 **Versions here are independent of Parlance's**, deliberately, and this table is
 how the two are tied together. Parlance uses the patch slot itself (`v0.4.3`
@@ -42,7 +43,7 @@ exists), so a mirrored version would leave this port no room to release its own
 fixes without colliding with a spec release.
 
 `v1.0.0` means something checkable: complete against the spec, not merely
-current with it. As of the v0.14.0 pin every family passes, so `main` meets
+current with it. As of the v0.15.0 pin every family passes, so `main` meets
 that bar; it is not tagged yet.
 
 [`conformance/PIN`](conformance/PIN) is the authoritative record of which
@@ -68,20 +69,30 @@ const Rng := preload("res://addons/parlance/rng.gd")
 var project := {"dialogues": {...}, "characters": {...}, "skills": {...}}
 var state = State.from_dict({})            # or a saved SerializedGameState
 
-# Present a node: filters choices by showIf, interpolates {placeholders}.
+# Present a node: skips gated interstitial beats, partitions choices,
+# interpolates {placeholders}. Check for "error" (COND-invalid data).
 var step: Dictionary = Runtime.step_dialogue(dialogue, "node_start", state, project)
-print(step["node"]["text"])
-for choice in step["visibleChoices"]:
-    print(choice["text"])
+var node: Dictionary = step["node"]          # may not be the id you asked for
+if not step["textHidden"] and node.has("text"):   # text is optional on a choice node
+    print(node["text"])
+for choice in step["visibleChoices"]:        # selectable (fallbacks already resolved)
+    print(choice["text"], choice.get("tags", []))
+for choice in step["lockedChoices"]:         # whenLocked "show": grey out, never selectable
+    print("(locked) ", choice.get("lockedText", choice["text"]))
 
 # onEnter effects are RETURNED, not applied. You decide when they fire —
-# on first arrival, not on replay.
+# on first arrival, not on replay. An `engine` effect changes no state:
+# dispatch it yourself, in order among the others.
+for effect in step["onEnterEffects"]:
+    if effect["type"] == "engine":
+        my_engine.run(effect["command"], effect.get("args", []))
 state = Runtime.apply_effects(step["onEnterEffects"], state, project)
 
 # Take a choice. Pass a seeded RNG so checks are reproducible.
 var outcome: Dictionary = Runtime.choose_choice(
-    dialogue, "node_start", "ch_ask", state, project, Rng.for_step(seed, step_index)
+    dialogue, node["id"], "ch_ask", state, project, Rng.for_step(seed, step_index)
 )
+# A hidden, locked or unoffered-fallback choice is refused with "error".
 state = outcome["newState"]
 if outcome.has("checkResult"):
     print(outcome["checkResult"])          # {passed, roll, total, skillValue, dice}
@@ -96,6 +107,13 @@ Three things that are easy to get wrong, and are contract rather than style:
 - **A node with no choices is not necessarily over.** If it has `next`, call
   `advance_node` — that's a listen-only beat. Treating it as the end silently
   truncates ambient chains.
+- **Resolve a node once per arrival, before its `onEnter`.** `step_dialogue`
+  judges both node gates (skip an interstitial beat; hide the line of a node
+  with choices or `isEnd`) against the state it is given. If you apply
+  `onEnter` before presenting, split it: `resolve_node` and
+  `node_text_hidden` against the arrival state, apply the effects, then
+  `step_resolved_node(node, post_state, project, text_hidden)`. Never resolve
+  again while the player stands on the node.
 - **Skills start empty by contract.** `createDefaultState` leaves them for the
   caller to fill from your character's stats or `progression.json`'s
   `startingSkills`. Skip it and every check rolls at zero.
@@ -103,10 +121,15 @@ Three things that are easy to get wrong, and are contract rather than style:
 ## What's ported
 
 Every conformance family: `evaluate`, `applyEffect`, `resolveCheck`,
-`stepDialogue`, `chooseChoice`, `advanceNode`, `resolveCharacterDialogue`,
+`stepDialogue` (on the shared `resolve_node` walk, with `step_resolved_node`
+for the arrival sequence), `chooseChoice`, `advanceNode`, `resolveCharacterDialogue`,
 `nextContinuations`, `resolveQuests`, the progression functions, and the
 mulberry32 PRNG. That covers dialogue end to end (gated choices, active skill
-checks and their conditional modifiers, effects, character dialogue offers),
+checks and their conditional modifiers, effects, character dialogue offers,
+fallback choices, locked choices via `whenLocked` / `rules.choices.whenLockedDefault`,
+line-only gates reported as `textHidden`, text-less choice nodes, `node.tags` /
+`choice.tags` passed through untouched, and `engine` effects returned for the
+host to dispatch),
 what to offer when a scene ends, quest effects, and levelling. `check_bonus`,
 `passive_check_passes` and `condition_specificity` are exported too:
 `passive_check_passes` is the passive-check reveal threshold
