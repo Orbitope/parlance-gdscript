@@ -35,7 +35,7 @@ vectors rather than against its author's confidence.
 
 | parlance-gdscript | Parlance spec | Families |
 |---|---|---|
-| `main` (unreleased) | v0.15.0 (pre-tag) — pinned to [`440369d`](conformance/PIN), the release-prep commit; moves to the tag commit once v0.15.0 is tagged | 11 of 11 |
+| `main` (unreleased) | v0.15.0 — pinned to [`a3c6454`](conformance/PIN) | 11 of 11 |
 
 **Versions here are independent of Parlance's**, deliberately, and this table is
 how the two are tied together. Parlance uses the patch slot itself (`v0.4.3`
